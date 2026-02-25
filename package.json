@@ -23,6 +23,9 @@
     "url": "https://github.com/indiekitai/just"
   },
   "author": "IndieKit",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@types/node": "^25.3.0",
     "tsup": "^8.0.0",
