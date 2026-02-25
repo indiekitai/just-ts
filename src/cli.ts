@@ -1,15 +1,22 @@
 #!/usr/bin/env node
 
-import { findJustfile, loadJustfile } from './justfile.js';
+import { findJustfile, loadJustfile, parseJustfile } from './justfile.js';
 import { run } from './executor.js';
-import { evaluateAssignments, getShell } from './evaluator.js';
-import { JustError } from './error.js';
+import { JustError, LexError, ParseError } from './error.js';
+
+/** Exit codes for machine consumption */
+export const EXIT_SUCCESS = 0;
+export const EXIT_RECIPE_FAILED = 1;
+export const EXIT_PARSE_ERROR = 2;
+export const EXIT_FILE_NOT_FOUND = 3;
 
 async function main() {
   const argv = process.argv.slice(2);
-  
+
   let dryRun = false;
   let list = false;
+  let json = false;
+  let dump = false;
   let justfilePath: string | undefined;
   const positional: string[] = [];
   const overrides: Record<string, string> = {};
@@ -20,14 +27,18 @@ async function main() {
       list = true;
     } else if (arg === '--dry-run' || arg === '-n') {
       dryRun = true;
+    } else if (arg === '--json') {
+      json = true;
+    } else if (arg === '--dump') {
+      dump = true;
     } else if (arg === '--justfile' || arg === '-f') {
       justfilePath = argv[++i];
     } else if (arg === '--help' || arg === '-h') {
       printUsage();
-      process.exit(0);
+      process.exit(EXIT_SUCCESS);
     } else if (arg === '--version' || arg === '-V') {
       console.log('just-run 0.1.0');
-      process.exit(0);
+      process.exit(EXIT_SUCCESS);
     } else if (arg.includes(':=')) {
       const [k, v] = arg.split(':=', 2);
       overrides[k] = v;
@@ -37,11 +48,42 @@ async function main() {
   }
 
   try {
-    const path = justfilePath ?? findJustfile();
+    let path: string;
+    try {
+      path = justfilePath ?? findJustfile();
+    } catch {
+      if (json) {
+        console.log(JSON.stringify({ error: 'No justfile found' }));
+      } else {
+        console.error('error: No justfile found');
+      }
+      process.exit(EXIT_FILE_NOT_FOUND);
+    }
+
     const justfile = loadJustfile(path);
 
+    if (dump) {
+      console.log(JSON.stringify(justfile, null, 2));
+      return;
+    }
+
     if (list) {
-      printList(justfile);
+      if (json) {
+        const recipes = justfile.recipes.map(r => ({
+          name: r.name,
+          doc: r.doc ?? null,
+          params: r.params.map(p => ({
+            name: p.name,
+            default: p.default ? true : false,
+            variadic: p.variadic ?? null,
+          })),
+          deps: r.deps.map(d => d.recipe),
+          quiet: r.quiet,
+        }));
+        console.log(JSON.stringify({ recipes }));
+      } else {
+        printList(justfile);
+      }
       return;
     }
 
@@ -55,13 +97,32 @@ async function main() {
       dryRun,
       overrides,
     });
+
+    if (json) {
+      console.log(JSON.stringify({ status: 'ok' }));
+    }
   } catch (e: any) {
-    if (e instanceof JustError) {
-      console.error(`error: ${e.message}`);
-      if (e.line !== undefined) {
-        console.error(`  --> line ${e.line + 1}`);
+    if (e instanceof LexError || e instanceof ParseError) {
+      if (json) {
+        console.log(JSON.stringify({ error: e.message, line: e.line, column: e.column }));
+      } else {
+        console.error(`error: ${e.message}`);
+        if (e.line !== undefined) {
+          console.error(`  --> line ${e.line + 1}`);
+        }
       }
-      process.exit(1);
+      process.exit(EXIT_PARSE_ERROR);
+    }
+    if (e instanceof JustError) {
+      if (json) {
+        console.log(JSON.stringify({ error: e.message }));
+      } else {
+        console.error(`error: ${e.message}`);
+        if (e.line !== undefined) {
+          console.error(`  --> line ${e.line + 1}`);
+        }
+      }
+      process.exit(EXIT_RECIPE_FAILED);
     }
     throw e;
   }
@@ -89,7 +150,7 @@ function printList(justfile: any) {
 }
 
 function printUsage() {
-  console.log(`just-run - A command runner
+  console.log(`just-run - A TypeScript command runner (port of casey/just)
 
 USAGE:
     just-run [OPTIONS] [RECIPE] [ARGS...]
@@ -98,8 +159,23 @@ OPTIONS:
     -f, --justfile <PATH>    Use specified justfile
     -l, --list               List available recipes
     -n, --dry-run            Print commands without executing
+        --json               Output in JSON format (for scripting/agents)
+        --dump               Parse justfile and output AST as JSON
     -h, --help               Show this help
-    -V, --version            Show version`);
+    -V, --version            Show version
+
+EXAMPLES:
+    just-run                 Run the default (first) recipe
+    just-run build           Run the 'build' recipe
+    just-run test --json     Run 'test' with JSON output
+    just-run --list --json   List recipes as JSON
+    just-run --dump          Dump parsed AST
+
+EXIT CODES:
+    0  Success
+    1  Recipe execution failed
+    2  Parse error (invalid justfile syntax)
+    3  Justfile not found`);
 }
 
 main();
