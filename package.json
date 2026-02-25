@@ -1,5 +1,5 @@
 {
-  "name": "@indiekit/just",
+  "name": "@indiekitai/just",
   "version": "0.1.0",
   "description": "A command runner - TypeScript port of casey/just",
   "type": "module",
