@@ -1,0 +1,10 @@
+export { lex, TokenKind } from './lexer.js';
+export type { Token } from './lexer.js';
+export { parse } from './parser.js';
+export { evaluateExpression, evaluateAssignments } from './evaluator.js';
+export type { EvalContext } from './evaluator.js';
+export { run } from './executor.js';
+export type { RunOptions } from './executor.js';
+export { findJustfile, loadJustfile, parseJustfile } from './justfile.js';
+export { JustError, LexError, ParseError, RuntimeError } from './error.js';
+export type { Justfile, Recipe, Assignment, Expression, Parameter, Dependency, Line, Fragment, Setting } from './ast.js';
