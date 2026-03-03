@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README.zh-CN.md)
+
 # @indiekit/just
 
 A command runner for TypeScript/Node.js — a TypeScript port of [casey/just](https://github.com/casey/just).
